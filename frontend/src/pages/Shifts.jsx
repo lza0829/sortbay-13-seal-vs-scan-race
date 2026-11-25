@@ -11,8 +11,11 @@ export default function Shifts() {
   }
   useEffect(() => { load().catch((e) => setErr(e.message)) }, [])
   const seal = async (id) => {
-    try { await api(`/班次/${id}/封班`, { method: 'POST' }); load() }
+    // 封班与过机装载争用后，无论胜负都要同刷班次页与对账：
+    // 胜则封班灯亮，负则未清件数反映对方已落账的在途件
+    try { await api(`/班次/${id}/封班`, { method: 'POST' }) }
     catch (e) { setErr(e.message) }
+    finally { load().catch((e) => setErr(e.message)) }
   }
   return (
     <div className="panel">

@@ -97,16 +97,25 @@ CREATE TABLE IF NOT EXISTS settings (
 
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # isolation_level=None：事务由 db() 显式 BEGIN，避免“读快照后再写”的升级窗口
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    # 写口互斥等待上限：争用方在窗口内等到锁后重读已提交态，按闸字段裁决
+    conn.execute("PRAGMA busy_timeout=10000")
     return conn
 
 
 @contextmanager
-def db():
+def db(immediate: bool = False):
+    """事务上下文。
+
+    immediate=True 时以 BEGIN IMMEDIATE 开场即取写锁：封班与过机装载等
+    写口在同一闸上序列化，检查与落账之间不再插入对方提交。
+    """
     conn = connect()
     try:
+        conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
         yield conn
         conn.commit()
     except Exception:
